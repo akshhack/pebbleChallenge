@@ -7,17 +7,16 @@ from sqlalchemy import inspect
 
 main = Blueprint("main", __name__)  # initialize blueprint
 
-
-class ObjKeys(enum.Enum):
-    DOB = 'dob'
-    DATE = 'date'
-    NAME = 'name'
-    QUOTE = 'quote'
-    ZIP = 'zip'
-    AMOUNT = 'amount'
-    COMPARE = 'compare'
-    LESS = 'less'
-    GREATER = 'greater'
+# constants
+DOB = 'dob'
+DATE = 'date'
+NAME = 'name'
+QUOTE = 'quote'
+ZIP = 'zip'
+AMOUNT = 'amount'
+COMPARE = 'compare'
+LESS = 'less'
+GREATER = 'greater'
 
 
 # function that is called when you visit /
@@ -26,7 +25,6 @@ def index():
     # you are now in the current application context with the main.route decorator
     # access the logger with the logger from api.core and uses the standard logging module
     # try using ipdb here :) you can inject yourself
-    logger.info("Hello World!")
     return render_template('index.html')
 
 
@@ -47,24 +45,25 @@ def get_users():
 @main.route("/quotes", methods=["GET"])
 def get_quotes():
     data = request.args
-    quotes = Quote.query.filter_by(Quote.date.between(date_yday(), date_now()))
+    logger.info("Data received is %s", data)
+    quotes = Quote.query.filter(Quote.date.between(date_yday(), date_now()))
 
-    if ObjKeys.ZIP in data:
+    if ZIP in data:
         logger.info("Zip filter requested.")
-        user_ids_with_zip = User.query.with_entities(User.id).filter_by(zip=data[ObjKeys.ZIP]).all()
-        quotes = quotes.filter_by(Quote.user.in_(user_ids_with_zip))
-    if ObjKeys.AMOUNT in data:
+        logger.info(data[ZIP])
+        user_ids_with_zip = User.query.with_entities(User.id).filter_by(zip=data[ZIP]).all()
+        quotes = quotes.filter(Quote.user.in_(user_ids_with_zip))
+    if AMOUNT in data:
         logger.info("Amount filter requested.")
-        if ObjKeys.COMPARE not in data or data[ObjKeys.COMPARE] is not ObjKeys.LESS or \
-                data[ObjKeys.COMPARE] is not ObjKeys.GREATER:
+        if COMPARE not in data:
             logger.info("Compare field malformed.")
             return render_template('error.html', msg="Amount mentioned without proper compare field")
-        if data[ObjKeys.COMPARE] == ObjKeys.LESS:
+        if data[COMPARE] == LESS:
             logger.info("Requested less.")
-            quotes = quotes.filter_by(Quote.quote <= float(data[ObjKeys.AMOUNT]))
-        elif data[ObjKeys.COMPARE] == ObjKeys.GREATER:
+            quotes = quotes.filter(Quote.quote <= float(data[AMOUNT]))
+        elif data[COMPARE] == GREATER:
             logger.info("Requested greater.")
-            quotes = quotes.filter_by(Quote.quote >= float(data[ObjKeys.AMOUNT]))
+            quotes = quotes.filter(Quote.quote >= float(data[AMOUNT]))
 
     return create_response(data={"quotes": serialize_list(quotes.all())})
 
@@ -81,31 +80,31 @@ def get_quote():
         return render_template('error.html', msg=msg)
 
     # Get quote which matches user info
-    user_id = User.query.filter_by(name=data[ObjKeys.NAME], dob=string_to_date(data[ObjKeys.DOB]),
-                                   zip=data[ObjKeys.ZIP]).first().id
+    user_id = User.query.filter_by(name=data[NAME], dob=string_to_date(data[DOB]),
+                                   zip=data[ZIP]).first().id
     quote = Quote.query.filter_by(user=user_id).first().to_dict()
 
-    logger.info("Quote found", quote)
     return create_response(data={"quote": quote})
 
 
 @main.route("/premium", methods=["GET"])
 def get_premium():
     now = date_now()
-    current_month = now.date().month()
-    current_year = now.date().year()
-    quotes = Quote.query.filter_by(Quote.date.date().month() == current_month).all()
+    current_month = now.date().month
+    current_year = now.date().year
+    quotes = Quote.query.all()
 
     total_premium_collected = 0
     for quoteObj in quotes:
-        quote_issuance_date = quoteObj[ObjKeys.DATE]
-        total_days_in_current_month = days_in_month(current_month, current_year)
-        quote_remaining_days_in_current_month = (last_day_of_month(now.date()) - quote_issuance_date.date()).days + 1
+        quote_issuance_date = quoteObj.date
+        if quote_issuance_date.date().month == current_month:
+            total_days_in_current_month = days_in_month(current_month, current_year)
+            quote_remaining_days_in_current_month = (last_day_of_month(now.date()) - quote_issuance_date.date()).days + 1
 
-        total_premium_collected += (1.0 * quote_remaining_days_in_current_month) / total_days_in_current_month * \
-                                   quoteObj[ObjKeys.QUOTE]
+            total_premium_collected += (1.0 * quote_remaining_days_in_current_month) / total_days_in_current_month * \
+                                       quoteObj.quote
 
-    return create_response(data={"quotes": quotes, "current_month_premium_collected": total_premium_collected})
+    return create_response(data={"quotes": serialize_list(quotes), "current_month_premium_collected": total_premium_collected})
 
 
 # POST request for /persons
@@ -119,8 +118,8 @@ def create_person_and_quote():
         return render_template('error.html', msg=msg)
 
     # Create new user and quote
-    quote = calculate_premium(data[ObjKeys.DOB])
-    new_user = User(name=data[ObjKeys.NAME], dob=string_to_date(data[ObjKeys.DOB]), zip=data[ObjKeys.ZIP])
+    quote = calculate_premium(data[DOB])
+    new_user = User(name=data[NAME], dob=string_to_date(data[DOB]), zip=data[ZIP])
     new_quote = Quote(quote=quote, date=date_now())
     new_user.quotes.append(new_quote)
 
@@ -131,7 +130,7 @@ def create_person_and_quote():
 
 
 def check_fields(data):
-    fields = [ObjKeys.NAME, ObjKeys.DOB, ObjKeys.ZIP]
+    fields = [NAME, DOB, ZIP]
     for field in fields:
         if field not in data or data[field] == '':
             msg = 'No %s provided for user.' % field

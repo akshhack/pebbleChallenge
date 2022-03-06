@@ -59,5 +59,4 @@ class ModelSQL(object):
                 attr = getattr(self, key)
                 result[key] = type_shunt_recursive(attr)
 
-
-return result
+        return result
